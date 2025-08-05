@@ -1,32 +1,26 @@
-# ===== STAGE 1: Build WAR using Maven =====
-FROM registry.access.redhat.com/ubi8/openjdk-17 as builder
+# Stage 2: Runtime image with only WAR
+FROM registry.redhat.io/jboss-eap-8/eap8-openjdk17-builder-openshift-rhel8:latest AS builder
 
-WORKDIR /app
+# Set up environment variables for provisioning.
+ENV GALLEON_PROVISION_FEATURE_PACKS org.jboss.eap:wildfly-ee-galleon-pack,org.jboss.eap.cloud:eap-cloud-galleon-pack
+ENV GALLEON_PROVISION_LAYERS cloud-default-config
+# Specify the JBoss EAP version
+ENV GALLEON_PROVISION_CHANNELS org.jboss.eap.channels:eap-8.0
 
-# Copy pom and source
-COPY pom.xml .
-COPY src ./src
 
-# Download dependencies + build WAR
-RUN mvn -B clean package -DskipTests
+# Run the assemble script to provision the server.
+RUN /usr/local/s2i/assemble
 
-# ===== STAGE 2: Deploy WAR to JBoss EAP 8 =====
-FROM registry.redhat.io/jboss-eap-8/eap8-openjdk17-runtime-openshift
 
-# Copy WAR from previous stage
-COPY --from=builder /app/target/noteworthy.war /opt/eap/standalone/deployments/
 
-# Expose app + management ports
-EXPOSE 8080 9990
+# Stage 3: Runtime image with only WAR
+FROM registry.redhat.io/jboss-eap-8/eap8-openjdk17-runtime-openshift-rhel8:latest AS runtime
 
-# Enable admin console
-ENV JBOSS_HOME=/opt/eap \
-    ADMIN_USERNAME=admin \
-    ADMIN_PASSWORD=admin123 \
-    MANAGEMENT_HTTP_PORT=9990 \
-    EAPX_ADMIN_PASSWORD=admin123 \
-    EAP8_SETUP_MANAGEMENT_USER=true \
-    ENABLE_MANAGEMENT_INTERFACE=true
+# Set appropriate ownership and permissions.
+COPY --from=builder --chown=jboss:root $JBOSS_HOME $JBOSS_HOME
 
-# Launch script compatible with OpenShift
-CMD ["/opt/eap/bin/openshift-launch.sh"]
+COPY --chown=jboss:root ./target/*.war $JBOSS_HOME/standalone/deployments
+
+EXPOSE 8080
+
+RUN chmod -R ug+rwX $JBOSS_HOME
