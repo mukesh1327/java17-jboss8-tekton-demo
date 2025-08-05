@@ -1,3 +1,10 @@
+FROM docker.io/library/maven:3.9.6-eclipse-temurin-17 AS war-build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+
 # Stage 2: Runtime image with only WAR
 FROM registry.redhat.io/jboss-eap-8/eap8-openjdk17-builder-openshift-rhel8:latest AS builder
 
@@ -19,8 +26,8 @@ FROM registry.redhat.io/jboss-eap-8/eap8-openjdk17-runtime-openshift-rhel8:lates
 # Set appropriate ownership and permissions.
 COPY --from=builder --chown=jboss:root $JBOSS_HOME $JBOSS_HOME
 
-COPY --chown=jboss:root ./target/*.war $JBOSS_HOME/standalone/deployments
+COPY --from=war-build --chown=jboss:root /app/target/*.war $JBOSS_HOME/standalone/deployments
 
-EXPOSE 8080
+EXPOSE 8080 9990
 
 RUN chmod -R ug+rwX $JBOSS_HOME
