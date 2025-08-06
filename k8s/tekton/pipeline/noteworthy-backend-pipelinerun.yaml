@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+
+metadata:
+  annotations:
+    chains.tekton.dev/signed: 'true'
+
+  name: noteworthy-backend
+
+  finalizers:
+    - results.tekton.dev/pipelinerun
+    - chains.tekton.dev/pipelinerun
+
+  labels:
+    tekton.dev/pipeline: noteworthy-backend
+
+spec:
+  pipelineRef:
+    name: noteworthy-backend
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  timeouts:
+    pipeline: 1h0m0s
+  workspaces:
+    - name: source-code
+      persistentVolumeClaim:
+        claimName: source-code-tkn-ci
+    - name: mvn-settings
+      persistentVolumeClaim:
+        claimName: maven-tkn-ci
