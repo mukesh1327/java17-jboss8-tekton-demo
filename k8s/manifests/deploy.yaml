@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: java-17-jboss1
-          image: 'image-registry.openshift-image-registry.svc:5000/app-deploy-demo/java-17-jboss1@sha256:ed3d4b3147189f3a95a58bb87c00abcb71c881550c4db6fe291d4c1399576220'
+          image: 'image-registry.openshift-image-registry.svc:5000/app-deploy-demo/java-17-jboss2:latest'
           ports:
             - containerPort: 8080
               protocol: TCP
