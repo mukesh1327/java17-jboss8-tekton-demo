@@ -1,9 +1,13 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
+
+
   annotations:
     tekton.dev/categories: custom-tasks
     tekton.dev/tags: custom-tasks
+
+
   name: openshift-client-customtask
 
 
@@ -11,6 +15,7 @@ spec:
   description: |-
     This task runs commands against the cluster provided by user and if not provided then where the Task is being executed.
     OpenShift is a Kubernetes distribution from Red Hat which provides oc, the OpenShift CLI that complements kubectl for simplifying deployment and configuration applications on OpenShift.
+
 
 
   params:
@@ -25,14 +30,25 @@ spec:
     - default: ''
       name: NAMESPACE
       type: string
-    - name: DEPLOYMENT_FILENAME
-      type: string
-      default: deployment.yaml
+    - default: deployment.yaml
       description: Name of the deployment YAML file
-    - name: MANIFESTS_SUBDIR
+      name: DEPLOYMENT_FILENAME
       type: string
+    - default: ''
       description: Optional subdirectory inside the manifest workspace
-      default: ""  # Default is root of the workspace
+      name: MANIFESTS_SUBDIR
+      type: string
+
+
+  results:
+    - description: |
+        deployment name
+      name: DEPLOYMENT_NAME
+      type: string
+    - description: |
+        manifests for the application
+      name: MANIFESTS
+      type: string
 
 
   stepTemplate:
@@ -56,6 +72,11 @@ spec:
         value: $(workspaces.kubeconfig_dir.bound)
       - name: WORKSPACES_KUBECONFIG_DIR_PATH
         value: $(workspaces.kubeconfig_dir.path)
+      - name: APP_NAME
+        value: $(steps.check-deployment-exists.results.DEPLOYMENT_NAME)
+      - name: MANIFESTS
+        value: $(steps.check-deployment-exists.results.MANIFESTS)
+
 
   steps:
     - computeResources: {}
@@ -64,32 +85,48 @@ spec:
           value: /tekton/home
       image: 'image-registry.openshift-image-registry.svc:5000/openshift/cli:latest'
       name: check-deployment-exists
+      results:
+        - description: |
+            deployment name
+          name: DEPLOYMENT_NAME
+          type: string
+        - description: |
+            manifests for the application
+          name: MANIFESTS
+          type: string
       script: |
         #!/usr/bin/env bash
         set -e
 
         echo "Namespace: ${PARAMS_NAMESPACE}"
+
         echo "Deployment file: ${PARAMS_DEPLOYMENT_FILENAME}"
+
         echo "Subdirectory: ${PARAMS_MANIFESTS_SUBDIR}"
 
         # Compute full path to manifest file
         if [[ -n "${PARAMS_MANIFESTS_SUBDIR}" ]]; then
-          DEPLOYMENT_NAME="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_MANIFESTS_SUBDIR}/${PARAMS_DEPLOYMENT_FILENAME}"
+          DEPLOYMENT_FILEPATH="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_MANIFESTS_SUBDIR}/${PARAMS_DEPLOYMENT_FILENAME}"
+          MANIFESTS="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_MANIFESTS_SUBDIR}"
+
         else
-          DEPLOYMENT_NAME="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_DEPLOYMENT_FILENAME}"
-        fi
+          DEPLOYMENT_FILEPATH="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_DEPLOYMENT_FILENAME}"
+          MANIFESTS="${WORKSPACES_MANIFEST_DIR_PATH}"
+        fi 
 
-        echo "Resolved manifest path: $DEPLOYMENT_NAME"
+        echo "Resolved manifest path: $MANIFESTS"
+        echo "Deployment file location: $DEPLOYMENT_FILEPATH"
+        echo -n $MANIFESTS | tee $(results.MANIFESTS.path) | tee $(step.results.MANIFESTS.path)
 
-        if [[ ! -f "$DEPLOYMENT_NAME" ]]; then
-          echo "ERROR: Deployment file not found at $DEPLOYMENT_NAME"
+        if [[ ! -f "$DEPLOYMENT_FILEPATH" ]]; then
+          echo "ERROR: Deployment file not found at $DEPLOYMENT_FILEPATH"
           exit 1
         fi
 
         # Attempt to extract deployment name
-        DEPLOYMENT_NAME=$(grep '^[[:space:]]*name:' "$DEPLOYMENT_NAME" | head -n 1 | sed 's/.*name:[[:space:]]*//')
+        DEPLOYMENT_NAME=$(grep '^[[:space:]]*name:' "$DEPLOYMENT_FILEPATH" | head -n 1 | sed 's/.*name:[[:space:]]*//')
 
-        if [[ -z "$DEPLOYMENT_NAME" ]]; then
+        if [[ -z "$DEPLOYMENT_FILEPATH" ]]; then
           echo "ERROR: Could not extract deployment name from manifest."
           exit 1
         fi
@@ -103,13 +140,10 @@ spec:
           echo "Deployment applied successfully."
         fi
 
-
+        echo -n $DEPLOYMENT_NAME | tee $(results.DEPLOYMENT_NAME.path) | tee $(step.results.DEPLOYMENT_NAME.path)
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
-
-
-
     - computeResources: {}
       env:
         - name: HOME
@@ -118,6 +152,10 @@ spec:
       name: oc
       script: |
         set -e
+
+        echo "Name: $APP_NAME"
+        echo "Manifests: $MANIFESTS"
+
         printf '%s' "IyEvdXNyL2Jpbi9lbnYgYmFzaAoKIyB0ZWt0b24ncyBob21lIGRpcmVjdG9yeQpkZWNsYXJlIC1yeCBURUtUT05fSE9NRT0iJHtURUtUT05fSE9NRTotL3Rla3Rvbi9ob21lfSIKCiMKIyBGdW5jdGlvbnMKIwoKZnVuY3Rpb24gZmFpbCgpIHsKICAgIGVjaG8gIkVSUk9SOiAkeyp9IiAyPiYxCiAgICBleGl0IDEKfQoKZnVuY3Rpb24gcGhhc2UoKSB7CiAgICBlY2hvICItLS0+IFBoYXNlOiAkeyp9Li4uIgp9CgojIGFzc2VydCBsb2NhbCB2YXJpYWJsZXMgYXJlIGV4cG9yZXRlZCBvbiB0aGUgZW52aXJvbm1lbnQKZnVuY3Rpb24gZXhwb3J0ZWRfb3JfZmFpbCgpIHsKICAgIGRlY2xhcmUgLWEgX3JlcXVpcmVkX3ZhcnM9IiR7QH0iCgogICAgZm9yIHYgaW4gJHtfcmVxdWlyZWRfdmFyc1tAXX07IGRvCiAgICAgICAgW1sgLXogIiR7IXZ9IiBdXSAmJgogICAgICAgICAgICBmYWlsICInJHt2fScgZW52aXJvbm1lbnQgdmFyaWFibGUgaXMgbm90IHNldCEiCiAgICBkb25lCgogICAgcmV0dXJuIDAKfQoK" |base64 -d >"/scripts/common.sh"
         printf '%s' "IyEvdXNyL2Jpbi9lbnYgYmFzaAoKc2hvcHQgLXMgaW5oZXJpdF9lcnJleGl0CnNldCAtZXUgLW8gcGlwZWZhaWwKCnNvdXJjZSAiJChkaXJuYW1lICR7QkFTSF9TT1VSQ0VbMF19KS9jb21tb24uc2giCnNvdXJjZSAiJChkaXJuYW1lICR7QkFTSF9TT1VSQ0VbMF19KS9vYy1jb21tb24uc2giCgpbWyAiJHtXT1JLU1BBQ0VTX01BTklGRVNUX0RJUl9CT1VORH0iID09ICJ0cnVlIiBdXSAmJiBcCiAgICAgIGNkICR7V09SS1NQQUNFU19NQU5JRkVTVF9ESVJfUEFUSH0KCltbICIke1dPUktTUEFDRVNfS1VCRUNPTkZJR19ESVJfQk9VTkR9IiA9PSAidHJ1ZSIgXV0gJiYgXApbWyAtZiAke1dPUktTUEFDRVNfS1VCRUNPTkZJR19ESVJfUEFUSH0va3ViZWNvbmZpZyBdXSAmJiBcCmV4cG9ydCBLVUJFQ09ORklHPSR7V09SS1NQQUNFU19LVUJFQ09ORklHX0RJUl9QQVRIfS9rdWJlY29uZmlnCgpldmFsICIke1BBUkFNU19TQ1JJUFR9IgoK" |base64 -d >"/scripts/oc-client.sh"
         printf '%s' "IyEvdXNyL2Jpbi9lbnYgYmFzaAoKCmRlY2xhcmUgLXJ4IFBBUkFNU19TQ1JJUFQ9IiR7UEFSQU1TX1NDUklQVDotfSIKZGVjbGFyZSAtcnggUEFSQU1TX1ZFUlNJT049IiR7UEFSQU1TX1ZFUlNJT046LX0iCgpkZWNsYXJlIC1yeCBXT1JLU1BBQ0VTX01BTklGRVNUX0RJUl9QQVRIPSIke1dPUktTUEFDRVNfTUFOSUZFU1RfRElSX1BBVEg6LX0iCmRlY2xhcmUgLXJ4IFdPUktTUEFDRVNfTUFOSUZFU1RfRElSX0JPVU5EPSIke1dPUktTUEFDRVNfTUFOSUZFU1RfRElSX0JPVU5EOi19IgpkZWNsYXJlIC1yeCBXT1JLU1BBQ0VTX0tVQkVDT05GSUdfRElSX1BBVEg9IiR7V09SS1NQQUNFU19LVUJFQ09ORklHX0RJUl9QQVRIOi19IgpkZWNsYXJlIC1yeCBXT1JLU1BBQ0VTX0tVQkVDT05GSUdfRElSX0JPVU5EPSIke1dPUktTUEFDRVNfS1VCRUNPTkZJR19ESVJfQk9VTkQ6LX0iCgojCiMgQXNzZXJ0aW5nIEVudmlyb25tZW50CiMKCmV4cG9ydGVkX29yX2ZhaWwgXAogICAgV09SS1NQQUNFU19NQU5JRkVTVF9ESVJfQk9VTkQgXAogICAgV09SS1NQQUNFU19LVUJFQ09ORklHX0RJUl9CT1VORCBcCiAgICBQQVJBTVNfU0NSSVBUIFwKICAgIFBBUkFNU19WRVJTSU9OCg==" |base64 -d >"/scripts/oc-common.sh"
@@ -134,8 +172,6 @@ spec:
   volumes:
     - emptyDir: {}
       name: scripts-dir
-
-
   workspaces:
     - description: The workspace which contains kubernetes manifests which we want to apply on the cluster.
       name: manifest_dir
