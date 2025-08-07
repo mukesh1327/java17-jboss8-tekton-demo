@@ -40,6 +40,10 @@ spec:
           value: '1'
         - name: SPARSE_CHECKOUT_DIRECTORIES
           value: ''
+        - name: MANIFESTS_SUBDIR
+          value: k8s/manifests
+        - name: DEPLOYMENT_FILENAME
+          value: deploy.yaml
       taskRef:
         kind: Task
         name: git-clone-customtask
@@ -74,7 +78,7 @@ spec:
     - name: container-image-build
       params:
         - name: IMAGE
-          value: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/java-17-jboss:$(tasks.maven-customtask.results.version)'
+          value: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/java-17-jboss:$(tasks.maven-clean-package.results.version)'
         - name: DOCKERFILE
           value: ./Dockerfile.jboss8
         - name: BUILD_ARGS
@@ -100,9 +104,29 @@ spec:
       taskRef:
         kind: Task
         name: buildah-customtask
-        resolver: cluster
       workspaces:
         - name: source
+          workspace: source-code
+
+    - name: app-deploy-manifests
+      params:
+        - name: SCRIPT
+          value: 'oc set image deployment $APP_NAME $APP_NAME=''image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/$APP_NAME:latest'''
+        - name: VERSION
+          value: latest
+        - name: NAMESPACE
+          value: app-deploy-demo
+        - name: MANIFESTS_SUBDIR
+          value: k8s/manifests
+        - name: DEPLOYMENT_FILENAME
+          value: deployment.yaml
+      runAfter:
+        - container-image-build
+      taskRef:
+        kind: Task
+        name: openshift-client-customtask
+      workspaces:
+        - name: manifest_dir
           workspace: source-code
 
 

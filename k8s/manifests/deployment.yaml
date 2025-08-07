@@ -1,13 +1,13 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: java-17-jboss2
+  name: noteworthy
 
   labels:
-    app: java-17-jboss2
-    app.kubernetes.io/component: java-17-jboss2
-    app.kubernetes.io/instance: java-17-jboss2
-    app.kubernetes.io/name: java-17-jboss2
+    app: noteworthy
+    app.kubernetes.io/component: noteworthy
+    app.kubernetes.io/instance: noteworthy
+    app.kubernetes.io/name: noteworthy
 
 spec:
 
@@ -15,18 +15,18 @@ spec:
 
   selector:
     matchLabels:
-      app: java-17-jboss2
+      app: noteworthy
 
   template:
     metadata:
       labels:
-        app: java-17-jboss2
-        deployment: java-17-jboss2
+        app: noteworthy
+        deployment: noteworthy
 
     spec:
       containers:
-        - name: java-17-jboss2
-          image: 'image-registry.openshift-image-registry.svc:5000/app-deploy-demo/java-17-jboss2:latest'
+        - name: noteworthy
+          image: 'image-registry.openshift-image-registry.svc:5000/namespace/noteworthy:latest'
           ports:
             - containerPort: 8080
               protocol: TCP
