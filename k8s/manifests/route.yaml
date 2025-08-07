@@ -1,0 +1,26 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: java-17-jboss1
+
+  labels:
+    app: java-17-jboss1
+    app.kubernetes.io/component: java-17-jboss1
+    app.kubernetes.io/instance: java-17-jboss1
+    app.kubernetes.io/name: java-17-jboss1
+
+spec:
+  host: java-17-jboss1-app-deploy-demo.apps.mc3.vpslab.com
+
+  to:
+    kind: Service
+    name: java-17-jboss1
+    weight: 100
+
+  port:
+    targetPort: 8080-tcp
+    
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

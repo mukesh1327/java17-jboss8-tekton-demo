@@ -1,13 +1,10 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-
-  name: openshift-client-customtask
-
   annotations:
-    tekton.dev/tags: custom-tasks
-    # tekton.dev/source: ''
     tekton.dev/categories: custom-tasks
+    tekton.dev/tags: custom-tasks
+  name: openshift-client-customtask
 
 
 spec:
@@ -25,11 +22,28 @@ spec:
       description: The OpenShift Version to use
       name: VERSION
       type: string
+    - default: ''
+      name: NAMESPACE
+      type: string
+    - name: DEPLOYMENT_FILENAME
+      type: string
+      default: deployment.yaml
+      description: Name of the deployment YAML file
+    - name: MANIFESTS_SUBDIR
+      type: string
+      description: Optional subdirectory inside the manifest workspace
+      default: ""  # Default is root of the workspace
 
 
   stepTemplate:
     computeResources: {}
     env:
+      - name: PARAMS_DEPLOYMENT_FILENAME
+        value: $(params.DEPLOYMENT_FILENAME)
+      - name: PARAMS_MANIFESTS_SUBDIR
+        value: $(params.MANIFESTS_SUBDIR)
+      - name: PARAMS_NAMESPACE
+        value: $(params.NAMESPACE)
       - name: PARAMS_SCRIPT
         value: $(params.SCRIPT)
       - name: PARAMS_VERSION
@@ -43,8 +57,59 @@ spec:
       - name: WORKSPACES_KUBECONFIG_DIR_PATH
         value: $(workspaces.kubeconfig_dir.path)
 
-
   steps:
+    - computeResources: {}
+      env:
+        - name: HOME
+          value: /tekton/home
+      image: 'image-registry.openshift-image-registry.svc:5000/openshift/cli:latest'
+      name: check-deployment-exists
+      script: |
+        #!/usr/bin/env bash
+        set -e
+
+        echo "Namespace: ${PARAMS_NAMESPACE}"
+        echo "Deployment file: ${PARAMS_DEPLOYMENT_FILENAME}"
+        echo "Subdirectory: ${PARAMS_MANIFESTS_SUBDIR}"
+
+        # Compute full path to manifest file
+        if [[ -n "${PARAMS_MANIFESTS_SUBDIR}" ]]; then
+          DEPLOYMENT_NAME="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_MANIFESTS_SUBDIR}/${PARAMS_DEPLOYMENT_FILENAME}"
+        else
+          DEPLOYMENT_NAME="${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_DEPLOYMENT_FILENAME}"
+        fi
+
+        echo "Resolved manifest path: $DEPLOYMENT_NAME"
+
+        if [[ ! -f "$DEPLOYMENT_NAME" ]]; then
+          echo "ERROR: Deployment file not found at $DEPLOYMENT_NAME"
+          exit 1
+        fi
+
+        # Attempt to extract deployment name
+        DEPLOYMENT_NAME=$(grep '^[[:space:]]*name:' "$DEPLOYMENT_NAME" | head -n 1 | sed 's/.*name:[[:space:]]*//')
+
+        if [[ -z "$DEPLOYMENT_NAME" ]]; then
+          echo "ERROR: Could not extract deployment name from manifest."
+          exit 1
+        fi
+
+        echo "Checking if deployment '$DEPLOYMENT_NAME' exists in namespace '$PARAMS_NAMESPACE'..."
+        if oc get deployment "$DEPLOYMENT_NAME" -n "$PARAMS_NAMESPACE" > /dev/null 2>&1; then
+          echo "Deployment '$DEPLOYMENT_NAME' already exists in namespace '$PARAMS_NAMESPACE'. Skipping apply."
+        else
+          echo "Deployment not found. Applying manifest..."
+          oc apply -f "${WORKSPACES_MANIFEST_DIR_PATH}/${PARAMS_MANIFESTS_SUBDIR}" -n "$PARAMS_NAMESPACE"
+          echo "Deployment applied successfully."
+        fi
+
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+
+
+
     - computeResources: {}
       env:
         - name: HOME
