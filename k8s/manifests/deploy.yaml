@@ -1,25 +1,25 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: java-17-jboss1
+  name: java-17-jboss2
   labels:
-    app: java-17-jboss1
-    app.kubernetes.io/component: java-17-jboss1
-    app.kubernetes.io/instance: java-17-jboss1
-    app.kubernetes.io/name: java-17-jboss1
+    app: java-17-jboss2
+    app.kubernetes.io/component: java-17-jboss2
+    app.kubernetes.io/instance: java-17-jboss2
+    app.kubernetes.io/name: java-17-jboss2
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: java-17-jboss1
+      app: java-17-jboss2
   template:
     metadata:
       labels:
-        app: java-17-jboss1
-        deployment: java-17-jboss1
+        app: java-17-jboss2
+        deployment: java-17-jboss2
     spec:
       containers:
-        - name: java-17-jboss1
+        - name: java-17-jboss2
           image: 'image-registry.openshift-image-registry.svc:5000/app-deploy-demo/java-17-jboss2:latest'
           ports:
             - containerPort: 8080
